@@ -1,0 +1,56 @@
+name: Check StudyNo custom property
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  metadata: read
+
+jobs:
+  check-studyno:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get StudyNo custom property
+        id: get_prop
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+        run: |
+          QUERY=$(cat <<'EOF'
+          query($owner: String!, $repo: String!) {
+            repository(owner: $owner, name: $repo) {
+              customProperty(name: "StudyNo") {
+                value
+              }
+            }
+          }
+          EOF
+          )
+
+          RESPONSE=$(curl -s -X POST https://api.github.com/graphql \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n \
+              --arg query "$QUERY" \
+              --arg owner "$OWNER" \
+              --arg repo "$REPO" \
+              '{query: $query, variables: {owner: $owner, repo: $repo}}')")
+
+          echo "GraphQL response:"
+          echo "$RESPONSE"
+
+          STUDY_NO=$(echo "$RESPONSE" | jq -r '.data.repository.customProperty.value // empty')
+
+          if [ -z "$STUDY_NO" ]; then
+            echo "::error ::Custom property StudyNo is missing or empty"
+            exit 1
+          fi
+
+          echo "StudyNo=$STUDY_NO" >> $GITHUB_ENV
+
+      - name: Success message
+        run: |
+          echo "✅ Custom property StudyNo exists"
+          echo "StudyNo value: $STUDY_NO"
