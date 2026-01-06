@@ -17,30 +17,18 @@ jobs:
           OWNER: ${{ github.repository_owner }}
           REPO: ${{ github.event.repository.name }}
         run: |
-          QUERY=$(cat <<'EOF'
-          query($owner: String!, $repo: String!) {
-            repository(owner: $owner, name: $repo) {
-              customProperty(name: "StudyNo") {
-                value
-              }
-            }
-          }
-          EOF
-          )
+          # REST API を使用してカスタムプロパティを取得
+          RESPONSE=$(curl -s -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/$OWNER/$REPO/properties/values")
 
-          RESPONSE=$(curl -s -X POST https://api.github.com/graphql \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "$(jq -n \
-              --arg query "$QUERY" \
-              --arg owner "$OWNER" \
-              --arg repo "$REPO" \
-              '{query: $query, variables: {owner: $owner, repo: $repo}}')")
-
-          echo "GraphQL response:"
+          echo "API response:"
           echo "$RESPONSE"
 
-          STUDY_NO=$(echo "$RESPONSE" | jq -r '.data.repository.customProperty.value // empty')
+          # JSON を解析して StudyNo の値を取得
+          # 注意：データ構造はオブジェクト配列です。property_name が "StudyNo" の項目を見つける必要があります
+          STUDY_NO=$(echo "$RESPONSE" | jq -r '.[] | select(.property_name == "StudyNo") | .value // empty')
 
           if [ -z "$STUDY_NO" ]; then
             echo "::error ::Custom property StudyNo is missing or empty"
